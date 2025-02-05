@@ -1,36 +1,33 @@
 const express = require('express');
 const mysql = require('mysql2');
 const path = require('path');
+const session = require('express-session');
 require('dotenv').config();
 
 const app = express();
-
-// Database connection
-const db = mysql.createConnection({
-    host: '127.0.0.1',
-    port: 3306,
-    user: 'root',
-    password: 'root',
-    database: 'taskease_db'
-});
-
-db.connect((err) => {
-    if (err) {
-        console.log('Database Connection Failed', err);
-    } else {
-        console.log('Database Connected');
-    }
-});
+const auth = require('./auth.js');  // Import authentication logic
+const tasks = require('./tasks.js');  // Import task-related routes
+const notifications = require('./notifications.js');  // Import notification logic
+const db = require('./config/database.js');  // Import database connection
 
 // Middleware
 app.use(express.static(path.join(__dirname, '../public')));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
+app.use('/tasks', tasks);  // Use the tasks routes
+app.use('/notifications', notifications);  // Use the notifications routes
+app.use(session({
+    secret: '123456',   // Change this to a strong, unique secret
+    resave: false,               // Avoid resaving session if not modified
+    saveUninitialized: true,      // Save new sessions that have no data
+    cookie: { maxAge: 90 * 60 * 1000 }  // Set session timeout (90 min)
+}));
 
 // Routes
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, '../views/index.html/index.html'));
+    res.sendFile(path.join(__dirname, '../views/index.html'));
 });
+
 
 app.get('/tasks', (req, res) => {
     let sql = 'SELECT * FROM tasks';
@@ -52,22 +49,4 @@ app.post('/tasks', (req, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
-});
-
-app.delete('/tasks/:id', (req, res) => {
-    let sql = 'DELETE FROM tasks WHERE id = ?';
-    db.query(sql, [req.params.id], (err, result) => {
-        if (err) throw err;
-        res.json({ success: true });
-    });
-});
-
-app.put('/tasks/:id', (req, res) => {
-    const { title, description } = req.body;
-    let sql = 'UPDATE tasks SET title = ?, description = ? WHERE id = ?';
-    
-    db.query(sql, [title, description, req.params.id], (err, result) => {
-        if (err) throw err;
-        res.json({ success: true });
-    });
 });
