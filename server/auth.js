@@ -1,42 +1,56 @@
-const bcrypt = require('bcrypt');
-const db = require('./config/database.js');
+const bcrypt = require("bcrypt");
+const express = require("express");
+const db = require("./config/database.js");
+const session = require("express-session");
 
-exports.registerUser = (req, res) => {
-    const { username, password } = req.body;
-    const hashedPassword = bcrypt.hashSync(password, 10);
-    
-    let sql = 'INSERT INTO users (username, password) VALUES (?, ?)';
-    db.query(sql, [username, hashedPassword], (err, result) => {
-        if (err) throw err;
-        res.send('User registered successfully');
+const router = express.Router();
+
+// Middleware for sessions
+router.use(
+    session({
+        secret: "your_secret_key",
+        resave: false,
+        saveUninitialized: true,
+        cookie: { maxAge: 90 * 60 * 1000 }, // 90-minute session timeout
+    })
+);
+
+// User Registration
+router.post("/signup", async (req, res) => {
+    const { name, email, password } = req.body;
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const query = "INSERT INTO users (name, email, password) VALUES (?, ?, ?)";
+    db.query(query, [name, email, hashedPassword], (err, result) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.status(201).json({ message: "User registered successfully" });
     });
-};
+});
 
-exports.loginUser = (req, res) => {
-    const { username, password } = req.body;
+// User Login
+router.post("/signin", (req, res) => {
+    const { email, password } = req.body;
 
-    let sql = 'SELECT * FROM users WHERE username = ?';
-    db.query(sql, [username], (err, results) => {
-        if (err) throw err;
+    db.query("SELECT * FROM users WHERE email = ?", [email], async (err, results) => {
+        if (err) return res.status(500).json({ error: err.message });
 
         if (results.length > 0) {
             const user = results[0];
-            if (bcrypt.compareSync(password, user.password)) {
-                req.session.user = user;
-                res.send('Login successful');
-            } else {
-                res.status(401).send('Invalid credentials');
-            }
-        } else {
-            res.status(404).send('User not found');
-        }
-    });
-};
+            const match = await bcrypt.compare(password, user.password);
 
-exports.authenticate = (req, res, next) => {
-    if (req.session.user) {
-        next();
-    } else {
-        res.status(401).send('Unauthorized');
-    }
-};
+            if (match) {
+                req.session.user = { id: user.id, email: user.email };
+                return res.json({ message: "Login successful" });
+            }
+        }
+        res.status(401).json({ message: "Invalid credentials" });
+    });
+});
+
+// Logout
+router.post("/logout", (req, res) => {
+    req.session.destroy();
+    res.json({ message: "Logged out successfully" });
+});
+
+module.exports = router;
